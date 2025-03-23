@@ -32,8 +32,8 @@ puff deploy
 
 # Настройка
 
-## Переменные окружения
-``DATABASE_URL: string`` - URL для подключения к PostgreSQL.
+<!-- ## Переменные окружения -->
+<!-- ``DATABASE_URL: string`` - URL для подключения к PostgreSQL. -->
 
 # Эндпоинты
 
