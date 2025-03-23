@@ -1,0 +1,58 @@
+data:
+  projectName: smokkkin's rust service builder
+  authors: ["smokingplaya"]
+  description: Manage your service more conveniently
+
+configuration:
+  default: dev
+
+variables:
+  service: wss
+
+tasks:
+  # Build image
+  build:
+    description: Builds service's container image
+    commands:
+      - docker build -t ${service}-service .
+
+  # Restart backend
+  restart:
+    description: Restarts backend
+    commands:
+      - cd ../backend && sudo puff
+
+  # Build image and restart backend
+  buildx:
+    description: Builds a service and restarts backend
+    commands:
+      - puff build && puff restart
+
+  # Build image and push it to the registry
+  deploy:
+    description: Builds a image, and push it to the registry
+    commands:
+      - puff build && puff tagimage && puff pushimage
+
+  # Push builded image to the registry
+  pushimage:
+    description: Pushes the image to the registry
+    commands:
+      - docker push "${HARBOR_SERVER}/riverfall/${service}-service:latest"
+
+  # Tag an builded image
+  tagimage:
+    description: Tags a image
+    commands:
+      - docker tag ${service}-service:latest ${HARBOR_SERVER}/riverfall/${service}-service:latest
+
+  # Run test
+  test:
+    description: Runs tests
+    commands:
+      - cargo test -- --nocapture
+
+  dev:
+    description: Rebuild service on file changes
+    commands:
+      - cargo watch -x 'run'
