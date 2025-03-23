@@ -30,7 +30,7 @@ cargo build --release
 puff deploy
 ```
 
-# Настройка
+<!-- # Настройка -->
 
 <!-- ## Переменные окружения -->
 <!-- ``DATABASE_URL: string`` - URL для подключения к PostgreSQL. -->
