@@ -30,14 +30,15 @@ cargo build --release
 puff deploy
 ```
 
-<!-- # Настройка -->
+# Настройка
 
-<!-- ## Переменные окружения -->
-<!-- ``DATABASE_URL: string`` - URL для подключения к PostgreSQL. -->
+## Переменные окружения
+``REDIS_URL: string`` - URL для подключения к Redis.
+``USER_URL: string`` - Домен до сервиса wss (ex. localhost:3000).
 
 # Эндпоинты
 
-## GET /{id}
+## GET ``/{id}``
 
 ### Описание
 Изменяет подключение с HTTP(s) до WebSocket(Secure)
@@ -49,7 +50,7 @@ Gateway должен вытащить ``ID пользователя`` из JWT.
 ### Параметры
 - **id** (string, обязателен): Айди пользователя
 
-## POST /send/{id}
+## POST ``/send/{id}``
 
 ### Описание
 Отправляет ивент на все активные WebSocket соединения\

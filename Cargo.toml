@@ -1,14 +1,15 @@
 [package]
 name = "wss-service"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
-adjust = "0.1.24"
+adjust = "0.1.26"
 anyhow = "1.0.95"
 axum = { version = "0.8.1", features = ["ws"] }
 futures-util = "0.3.31"
 log = "0.4.26"
+reqwest = "0.12.15"
 serde_json = "1.0.140"
 
 [dependencies.tokio]

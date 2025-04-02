@@ -1,5 +1,5 @@
-use adjust::{controller::Controller, response::{HttpMessage, HttpResult}};
-use axum::{extract::{Path, Query, WebSocketUpgrade}, response::IntoResponse, routing::{get, post}, Json, Router};
+use adjust::{controller::Controller, response::NonJsonHttpResult};
+use axum::{extract::{Path, Query, State, WebSocketUpgrade}, response::IntoResponse, routing::{get, post}, Json, Router};
 use serde::Deserialize;
 use serde_json::Value;
 use crate::{service::wss::WssService, AppState};
@@ -9,30 +9,49 @@ struct QueryEventType {
   r#type: String
 }
 
+#[derive(Deserialize)]
+struct BroadcastBody {
+  ids: Vec<i32>,
+  body: Value
+}
+
 pub struct WssController;
 
 impl WssController {
   // подключение к wss
   async fn connect(
     wss: WebSocketUpgrade,
-    Path(id): Path<usize>,
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
   ) -> impl IntoResponse {
-    WssService::upgrade(wss, id)
+    WssService::upgrade(state.redis, wss, id)
   }
 
   // secure, internal
   // отправка ивента в подключение wss
   async fn send(
-    Path(id): Path<usize>,
+    Path(id): Path<i32>,
     Query(query): Query<QueryEventType>,
     Json(payload): Json<Value>
-  ) -> HttpResult<HttpMessage> {
-    WssService::send(id, query.r#type, payload)
+  ) -> NonJsonHttpResult<()> {
+    WssService::send(
+      id,
+      &WssService::serialize(query.r#type, payload)?
+    ).await?;
+
+    Ok(())
+  }
+
+  // secure, internal
+  // отправка ивента подключениям wss
+  async fn broadcast(
+    Query(query): Query<QueryEventType>,
+    Json(payload): Json<BroadcastBody>
+  ) -> NonJsonHttpResult<()> {
+    WssService::broadcast(payload.ids, query.r#type, payload.body)
       .await?;
 
-    Ok(Json(
-      HttpMessage::new("Ивент был отправлен")
-    ))
+    Ok(())
   }
 }
 
@@ -45,5 +64,6 @@ impl Controller<AppState> for WssController {
     router
       .route("/{id}", get(Self::connect))
       .route("/send/{id}", post(Self::send))
+      .route("/broadcast", post(Self::broadcast))
   }
 }
