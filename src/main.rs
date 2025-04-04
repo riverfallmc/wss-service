@@ -17,7 +17,6 @@ async fn main() -> Service<'_, AppState> {
     name: "Wss",
     state: AppState::default(),
     controllers: controllers![WssController],
-    port: Some(1401),
     ..Default::default()
   }
 }
