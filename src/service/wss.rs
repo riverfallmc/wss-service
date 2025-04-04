@@ -1,6 +1,6 @@
-use std::{collections::HashMap, sync::OnceLock};
+use std::{collections::HashMap, sync::{Arc, OnceLock}};
 use adjust::{database::{redis::Redis, Database, Pool}, response::NonJsonHttpResult};
-use anyhow::anyhow;
+use anyhow::{anyhow, bail, Result};
 use axum::{
   extract::{ws::{Message, WebSocket}, WebSocketUpgrade},
   response::IntoResponse
@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{mpsc::{unbounded_channel, UnboundedSender}, Mutex};
 use futures_util::{StreamExt, SinkExt};
-
 use super::status::StatusService;
 
 struct WssConnection {
@@ -23,9 +22,42 @@ struct WssEvent {
   data: Value
 }
 
+#[derive(Serialize, Deserialize)]
+struct EventPlay {
+  server: i32
+}
+
+/// Сообщение от клиента
+#[derive(Serialize, Deserialize)]
+struct WssMessage {
+  r#type: String,
+  data: Value
+}
+
 type WssConnections = Vec<WssConnection>;
 
 static CONNECTIONS: OnceLock<Mutex<HashMap<i32, WssConnections>>> = OnceLock::new();
+
+fn handle_message(redis: &mut Database<Redis>, user_id: i32, message: Message) -> Result<()> {
+  match message {
+    Message::Text(bytes) => {
+      let message = serde_json::from_str::<WssMessage>(&bytes)?;
+
+      match message.r#type.to_lowercase().as_str() {
+        "play" => {
+          let body = serde_json::from_value::<EventPlay>(message.data)?;
+
+          StatusService::playing(redis, user_id, body.server);
+        },
+        _ => {}
+      }
+    },
+    Message::Close(_) => bail!("Closed"),
+    _ => {},
+  };
+
+  Ok(())
+}
 
 pub struct WssService;
 
@@ -44,7 +76,8 @@ impl WssService {
     wss: WebSocket,
     id: i32
   ) {
-    let (mut tx, mut rx) = wss.split();
+    let (tx, mut rx) = wss.split();
+    let tx = Arc::new(Mutex::new(tx));
     let (sender, mut receiver) = unbounded_channel();
 
     let connection = WssConnection { sender };
@@ -55,17 +88,28 @@ impl WssService {
       id_in_vec = Self::connect(&mut redis, id, connection).await;
     }
 
+    let tx_clone = Arc::clone(&tx);
+
     tokio::spawn(async move {
       while let Some(msg) = receiver.recv().await {
-        let _ = tx.send(msg).await;
+        let _ = tx_clone.lock().await.send(msg).await;
       }
     });
 
     while let Some(msg) = rx.next().await {
-      if msg.is_err() {
-        break;
+      let mut redis = redis.get().unwrap(); // damn it
+
+      match msg {
+        Ok(message) => {
+          if handle_message(&mut redis, id, message).is_err() {
+            break
+          }
+        },
+        Err(_) => {}
       }
     }
+
+    let _ = tx.lock().await.close().await;
 
     if let Ok(mut redis) = redis.get() {
       Self::disconnect(&mut redis, id, id_in_vec).await;
@@ -76,6 +120,8 @@ impl WssService {
     r#type: String,
     data: Value
   ) -> NonJsonHttpResult<Message> {
+    let data = Self::fix_json_value(data);
+
     let event = WssEvent {r#type, data};
 
     let json = serde_json::to_string(&event)
@@ -152,5 +198,13 @@ impl WssService {
     }
 
     StatusService::offline(redis, id);
+  }
+
+  fn fix_json_value(val: Value) -> Value {
+    match val {
+      Value::String(s) => serde_json::from_str(&s)
+        .unwrap_or(Value::String(s)),
+      _ => val,
+    }
   }
 }
